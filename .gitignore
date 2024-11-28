@@ -1,0 +1,18 @@
+# Ignore datasets
+SF-MASK-dataset/
+SF-MASK-dataset-padded/
+
+
+
+# Ignore virtual environment
+env/
+
+poetry.lock
+pyproject.toml
+
+*.zip
+
+# Ignore temporary/system files
+*.ipynb_checkpoints
+__pycache__/
+*.DS_Store
