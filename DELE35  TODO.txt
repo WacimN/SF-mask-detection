@@ -10,6 +10,6 @@ Comparaison :
  - Avec ou sans KFold 
  - Influence du LR sur le fine-tunning 
  - MobileNetV2 VS EfficientNet
-
+Faire varier la head de MobileNetv2
 matrice de confusion
 expliquée le fine-tunning  
