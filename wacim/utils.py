@@ -8,6 +8,54 @@ import torch
 import datetime
 from itertools import product
 from torch import nn
+from PIL import Image
+from tqdm import tqdm
+import time
+
+
+
+# ========================
+# Data Preprocessing
+# ======================== 
+
+def pad_and_resize(input_dir, output_dir, target_size=(224, 224), padding_color=(0, 0, 0)):
+    """
+    Resize images with aspect ratio preservation and pad to target size.
+
+    Args:
+        input_dir (str): Path to input directory containing image categories.
+        output_dir (str): Path to save resized and padded images.
+        target_size (tuple): Target size (width, height).
+        padding_color (tuple): Padding color as (R, G, B).
+
+    Returns:
+        None
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    for category in os.listdir(input_dir):
+        category_path = os.path.join(input_dir, category)
+        output_category_path = os.path.join(output_dir, category)
+        os.makedirs(output_category_path, exist_ok=True)
+        
+        for filename in tqdm(os.listdir(category_path), desc=f"Processing {category}"):
+            input_path = os.path.join(category_path, filename)
+            output_path = os.path.join(output_category_path, filename)
+            try:
+                with Image.open(input_path) as img:
+                    old_size = img.size  # (width, height)
+                    ratio = float(target_size[0]) / max(old_size)
+                    new_size = tuple([int(x * ratio) for x in old_size])
+                    img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
+                    
+                    new_img = Image.new("RGB", target_size, padding_color)  # Use specified padding color
+                    new_img.paste(
+                        img_resized,
+                        ((target_size[0] - new_size[0]) // 2, (target_size[1] - new_size[1]) // 2),
+                    )
+                    new_img.save(output_path)
+            except Exception as e:
+                print(f"Error with {input_path}: {e}")
+                
 
 # ========================
 # Metrics Saving
@@ -210,12 +258,15 @@ def save_best_config(results):
 # ========================
 # Helper Functions
 # ========================
+import torch.nn as nn
+from torchvision import models
+
 def initialize_model(model_class, num_classes, device="cuda:0"):
     """
     Initialize a model with a specified number of output classes.
 
     Args:
-        model_class: Model class to initialize (e.g., models.mobilenet_v2).
+        model_class: Model class to initialize (e.g., models.mobilenet_v2 or models.efficientnet_b0).
         num_classes: Number of output classes.
         device: Device to load the model (default is "cuda:0").
 
@@ -223,8 +274,17 @@ def initialize_model(model_class, num_classes, device="cuda:0"):
         Initialized model.
     """
     model = model_class(pretrained=True)
-    model.classifier[1] = nn.Linear(model.last_channel, num_classes)
+
+    # Check model class and adjust the final layer
+    if isinstance(model, models.MobileNetV2):
+        model.classifier[1] = nn.Linear(model.last_channel, num_classes)
+    elif isinstance(model, models.EfficientNet):
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+    else:
+        raise ValueError("Unsupported model class")
+
     return model.to(device)
+
 
 
 def save_best_model(current_accuracy, best_accuracy, model, save_path):
@@ -245,3 +305,31 @@ def save_best_model(current_accuracy, best_accuracy, model, save_path):
         print(f"New best model saved with accuracy: {current_accuracy:.2f}%")
         return current_accuracy
     return best_accuracy
+
+
+def measure_inference_time(model, dataloader, device="cuda:0"):
+    """
+    Measure inference time for a single batch of images.
+    
+    Args:
+        model: The trained model.
+        dataloader: A DataLoader for the test data.
+        device: Device to perform inference on.
+        
+    Returns:
+        Average inference time per image (ms).
+    """
+    model.eval()
+    total_time = 0
+    num_samples = 0
+    with torch.no_grad():
+        for inputs, _ in dataloader:
+            inputs = inputs.to(device)
+            start_time = time.time()
+            _ = model(inputs)
+            end_time = time.time()
+            total_time += (end_time - start_time)
+            num_samples += inputs.size(0)
+            break  # Measure on a single batch
+    avg_inference_time = (total_time / num_samples) * 1000  # Convert to ms
+    return avg_inference_time

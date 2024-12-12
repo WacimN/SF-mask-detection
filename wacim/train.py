@@ -4,7 +4,8 @@ from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import KFold, ParameterGrid
 from torch import nn
-
+from utils import save_best_model, save_metrics_to_json, initialize_model
+import os
 
 # ========================
 # Train Model Function (Updated)
@@ -105,7 +106,7 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
     print(f"Total training time: {total_time:.2f}s")
 
     # Save model weights after training
-    model_save_path = f"training/{model.__class__.__name__}_trained_{training_time_name}.pth"
+    model_save_path = f"training/{model.__class__.__name__}_{training_time_name}.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"Model weights saved to {model_save_path}")
 
@@ -114,100 +115,93 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
 
 
 
-def kfold_cross_validation_with_hyperparams(
-    model_class, 
-    dataset, 
-    criterion, 
-    optimizer_class, 
-    param_grid, 
-    k_folds=5, 
-    epochs=30, 
-    augment=True, 
-    training_time_name="model",
-    device="cuda:0"
+# ========================
+# K-Fold Cross-Validation with Hyperparameter Tuning
+# ========================
+def kfold_with_hyperparam_tuning(
+    model_class, original_dataset, dataset, criterion, optimizer_class, param_grid, augment_strategies, k_folds=5, epochs=30, device="cuda:0", results_file = "kfold_hyperparam_results.json"
 ):
     """
-    Perform K-fold cross-validation with hyperparameter search and optional data augmentation.
+    Perform K-fold cross-validation with hyperparameter tuning and data augmentation comparison.
 
     Args:
-        model_class: Class of the model to initialize for each configuration.
+        model_class: Class of the model to initialize.
         dataset: Full dataset for K-fold splitting.
         criterion: Loss function.
         optimizer_class: Optimizer class (e.g., optim.Adam).
-        param_grid: Dictionary of hyperparameters to search.
+        param_grid: Grid of hyperparameters.
+        augment_strategies: List of booleans specifying augmentation settings.
         k_folds: Number of folds for K-fold CV.
-        epochs: Number of epochs for each training run.
-        augment: Whether to apply data augmentation.
-        training_time_name: Base name for saving model weights and logs.
+        epochs: Number of epochs per training.
         device: Device for training (default "cuda:0").
 
     Returns:
-        List of metrics and model paths for each parameter configuration and fold.
+        Aggregated metrics for all configurations.
     """
-    # Initialize hyperparameter grid
+    print(f"Running K-fold cross-validation with hyperparameter tuning for {model_class.__name__}...\n")
+    print(f"{len(dataset)} samples in the dataset = {len(original_dataset)}/{len(dataset)}= {len(original_dataset)/len(dataset)}%. {k_folds}-fold CV with {epochs} epochs per fold.")
     param_combinations = list(ParameterGrid(param_grid))
     all_results = []
+    
+    classes =  original_dataset.classes
 
-    for params in param_combinations:
-        print(f"\nTesting hyperparameters: {params}")
+    os.makedirs("results", exist_ok=True)
 
-        # Create KFold object
-        kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
-        param_results = []  # Metrics for this hyperparameter combination
+    for augment in augment_strategies:
+        augment_desc = "With Augmentation" if augment else "Without Augmentation"
+        print(f"\n=== Running {augment_desc} ===")
 
-        for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
-            print(f"Fold {fold + 1}/{k_folds} for hyperparameters {params}")
-            
-            # Split dataset into train and validation subsets
-            train_subset = Subset(dataset, train_idx)
-            val_subset = Subset(dataset, val_idx)
+        for params in param_combinations:
+            print(f"\nTesting hyperparameters: {params}")
 
-            # Apply data augmentation only to the training subset
-            train_loader = DataLoader(
-                train_subset, 
-                batch_size=params['batch_size'], 
-                shuffle=True, 
-                collate_fn=None if augment else lambda x: x
-            )
-            val_loader = DataLoader(
-                val_subset, 
-                batch_size=params['batch_size'], 
-                shuffle=False
-            )
+            kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+            best_accuracy = 0.0
+            fold_results = []
 
-            # Initialize the model
-            model = model_class(pretrained=True)
-            model.classifier[1] = nn.Linear(model.last_channel, len(dataset.classes))
-            model = model.to(device)
+            for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
+                print(f"\nFold {fold + 1}/{k_folds} for {params}")
 
-            # Initialize optimizer with current learning rate
-            optimizer = optimizer_class(model.parameters(), lr=params['learning_rate'])
+                train_subset = Subset(dataset, train_idx)
+                val_subset = Subset(dataset, val_idx)
 
-            # Train the model for this fold
-            training_metrics, model_save_path, total_time = train_model(
-                model=model, 
-                train_loader=train_loader, 
-                val_loader=val_loader, 
-                test_loader=None, 
-                criterion=criterion, 
-                optimizer=optimizer, 
-                epochs=epochs, 
-                training_time_name=f"{training_time_name}_lr_{params['learning_rate']}_bs_{params['batch_size']}_fold_{fold+1}"
-            )
+                train_loader = DataLoader(
+                    train_subset,
+                    batch_size=params["batch_size"],
+                    shuffle=True,
+                    collate_fn=None if augment else lambda x: x,  # Apply augmentation conditionally
+                )
+                val_loader = DataLoader(val_subset, batch_size=params["batch_size"], shuffle=False)
 
-            # Store fold results
-            param_results.append({
+                # Initialize model and optimizer
+                model = initialize_model(model_class, num_classes=len(classes), device=device)
+                optimizer = optimizer_class(model.parameters(), lr=params["learning_rate"])
+
+                # Train model
+                training_time_name = f"lr_{params['learning_rate']}_bs_{params['batch_size']}_aug_{augment}_fold_{fold+1}"
+                training_metrics, model_save_path, total_time = train_model(
+                    model, train_loader, val_loader, None, criterion, optimizer, epochs, training_time_name, device=device
+                )
+
+                # Track best model for this configuration
+                val_accuracy = training_metrics[-1]["val_accuracy"]
+                best_accuracy = save_best_model(val_accuracy, best_accuracy, model, f"results/best_model_{round(val_accuracy,2)}_{training_time_name}.pth")
+
+                fold_results.append({
                 "fold": fold + 1,
-                "training_metrics": training_metrics,
                 "model_save_path": model_save_path,
-                "params": params
+                "total_time_training": total_time,
+                "val_accuracy": val_accuracy,
+                "training_metrics": training_metrics,
             })
+            
+            all_total_time = sum([result["total_time_training"] for result in fold_results])
 
-        # Aggregate results for this parameter combination
-        all_results.append({
-            "params": params,
-            "results": param_results
-        })
+            all_results.append({
+                "all_total_time_kfold": all_total_time,
+                "params": params,
+                "augment": augment,
+                "fold_results": fold_results,
+            })
 
     return all_results
 

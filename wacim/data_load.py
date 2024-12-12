@@ -41,23 +41,25 @@ def get_transforms(augment=False):
 # ========================
 def load_dataset(data_dir, proportion=DATASET_PROPORTION, augment=False):
     """
-    Load a dataset with optional data augmentation.
-    
+    Load a dataset with optional data augmentation and limit its size by proportion.
+
     Args:
         data_dir (str): Path to the dataset directory.
         proportion (float): Proportion of the dataset to use.
         augment (bool): Whether to apply data augmentation.
-    
+
     Returns:
-        torch.utils.data.Subset: Subset of the dataset.
+        Tuple[torchvision.datasets.ImageFolder, torch.utils.data.Subset]: Full dataset and subset.
     """
     transform = get_transforms(augment=augment)
     dataset = datasets.ImageFolder(data_dir, transform=transform)
-    subset, _ = random_split(
-        dataset, 
-        [int(len(dataset) * proportion), len(dataset) - int(len(dataset) * proportion)]
-    )
+
+    # Select only a proportion of the dataset
+    subset_size = int(len(dataset) * proportion)
+    subset, _ = random_split(dataset, [subset_size, len(dataset) - subset_size])
+
     return dataset, subset
+
 
 def split_train_val(train_dataset, split_ratio=TRAIN_VAL_SPLIT):
     """
@@ -88,13 +90,16 @@ def get_dataloaders(train_dir, test_dir, augment=False, batch_size=BATCH_SIZE):
     Returns:
         Tuple[DataLoader, DataLoader, DataLoader]: Train, validation, and test DataLoaders.
     """
-    train_dataset , train_subset = load_dataset(train_dir, augment=augment)
-    test_dataset , test_subset = load_dataset(test_dir, augment=False)
+    # Load datasets with 10% of the data
+    train_dataset, train_subset = load_dataset(train_dir, proportion=DATASET_PROPORTION, augment=True)
+    test_dataset, test_subset = load_dataset(test_dir, augment=False)
 
+    # Split train_subset into train and validation
     train_subset, val_subset = split_train_val(train_subset)
-    
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)  # No shuffling for validation
-    test_loader = DataLoader(test_subset, batch_size=batch_size, shuffle=False)
+
+    # Create DataLoaders
+    train_loader = DataLoader(train_subset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_subset, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_subset, batch_size=BATCH_SIZE, shuffle=False)
     
     return train_dataset, train_subset, val_subset , test_subset, train_loader, val_loader, test_loader
