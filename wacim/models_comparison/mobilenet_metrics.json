@@ -1,0 +1,138 @@
+[
+    {
+        "metrics": {
+            "model_name": "MobileNetV2",
+            "device": "cuda",
+            "training_time_total": 610.044468164444,
+            "dataset_info": {
+                "original_train_dataset_size": 37156,
+                "proportion_used": 0.1,
+                "train_subset_size": 2972,
+                "validation_subset_size": 743,
+                "test_subset_size": 867
+            },
+            "model_performance": {
+                "test accuracy": 92.50288350634371,
+                "training_metrics": [
+                    {
+                        "epoch": 1,
+                        "train_loss": 0.33651421948145793,
+                        "val_loss": 0.24696871545165777,
+                        "train_accuracy": 85.63257065948856,
+                        "val_accuracy": 89.77119784656797,
+                        "train_f1": 0.8564363639353579,
+                        "val_f1": 0.8978850432351401,
+                        "time": 59.845335960388184,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 2,
+                        "train_loss": 0.22178229921928017,
+                        "val_loss": 0.21280760690569878,
+                        "train_accuracy": 91.38627187079408,
+                        "val_accuracy": 90.44414535666218,
+                        "train_f1": 0.9139995686154714,
+                        "val_f1": 0.9042860781129735,
+                        "time": 48.00683641433716,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 3,
+                        "train_loss": 0.19896699568276766,
+                        "val_loss": 0.21005492533246675,
+                        "train_accuracy": 91.99192462987887,
+                        "val_accuracy": 91.52086137281292,
+                        "train_f1": 0.9200357877911078,
+                        "val_f1": 0.9155135915382365,
+                        "time": 49.63398289680481,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 4,
+                        "train_loss": 0.1795297667624489,
+                        "val_loss": 0.1698502185754478,
+                        "train_accuracy": 92.56393001345894,
+                        "val_accuracy": 93.80888290713324,
+                        "train_f1": 0.9257787497171828,
+                        "val_f1": 0.9382449395942776,
+                        "time": 48.86760640144348,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 5,
+                        "train_loss": 0.149038127513342,
+                        "val_loss": 0.15814787847921252,
+                        "train_accuracy": 93.94347240915208,
+                        "val_accuracy": 93.40511440107672,
+                        "train_f1": 0.9395464310191682,
+                        "val_f1": 0.93413816547752,
+                        "time": 47.967203855514526,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 6,
+                        "train_loss": 0.1547911000508134,
+                        "val_loss": 0.1655895966105163,
+                        "train_accuracy": 93.371467025572,
+                        "val_accuracy": 92.59757738896366,
+                        "train_f1": 0.933795058253146,
+                        "val_f1": 0.9260921051306551,
+                        "time": 50.04533386230469,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 7,
+                        "train_loss": 0.1425238892996824,
+                        "val_loss": 0.17788228089921176,
+                        "train_accuracy": 94.34724091520862,
+                        "val_accuracy": 93.27052489905788,
+                        "train_f1": 0.9435266028826594,
+                        "val_f1": 0.932906367079459,
+                        "time": 47.989720821380615,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 8,
+                        "train_loss": 0.10966095146072168,
+                        "val_loss": 0.1731896495912224,
+                        "train_accuracy": 95.5585464333782,
+                        "val_accuracy": 92.46298788694482,
+                        "train_f1": 0.9556145228911384,
+                        "val_f1": 0.9247747089413102,
+                        "time": 49.16501331329346,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 9,
+                        "train_loss": 0.12592351939829607,
+                        "val_loss": 0.16408998658880591,
+                        "train_accuracy": 95.05383580080753,
+                        "val_accuracy": 92.86675639300135,
+                        "train_f1": 0.9505839359411594,
+                        "val_f1": 0.928655761501392,
+                        "time": 48.541139125823975,
+                        "learning_rate": 0.0001
+                    },
+                    {
+                        "epoch": 10,
+                        "train_loss": 0.1138107015961601,
+                        "val_loss": 0.18563319991032282,
+                        "train_accuracy": 95.59219380888291,
+                        "val_accuracy": 93.6742934051144,
+                        "train_f1": 0.9559490522689881,
+                        "val_f1": 0.9369276420562432,
+                        "time": 48.550175189971924,
+                        "learning_rate": 0.0001
+                    }
+                ]
+            },
+            "training_parameters": {
+                "epochs": 30,
+                "batch_size": 32,
+                "learning_rate": 0.0001
+            }
+        },
+        "k_folds": null,
+        "hyperparameter_search": null
+    }
+]
