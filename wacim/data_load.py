@@ -23,7 +23,10 @@ def get_transforms(augment=False):
         return transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),
+            transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+            transforms.RandomAffine(degrees=20, scale=(0.8, 1.2), translate=(0.2, 0.2)),
+            transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.ToTensor(),
             transforms.Normalize(mean=MEAN, std=STD),
         ])
@@ -31,6 +34,8 @@ def get_transforms(augment=False):
         transforms.ToTensor(),
         transforms.Normalize(mean=MEAN, std=STD),
     ])
+
+    
 # ========================
 # Dataset and Dataloader
 # ========================

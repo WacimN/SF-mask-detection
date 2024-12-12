@@ -2,21 +2,21 @@ import time
 import torch
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader, Subset
-from sklearn.model_selection import KFold
-
+from sklearn.model_selection import KFold, ParameterGrid
+from torch import nn
 
 
 # ========================
 # Train Model Function (Updated)
 # ========================
-def train_model(model, train_loader, val_loader, test_loader, criterion, optimizer, epochs, training_time_name, device = "cuda:0"):
+def train_model(model, train_loader, val_loader, test_loader, criterion, optimizer, epochs, training_time_name, device="cuda:0", use_early_stopping=True):
     print(f"size of train_loader : {len(train_loader)}, size of val_loader : {len(val_loader)}")
     print(f"Training {model.__class__.__name__} for {epochs} epochs...")
     training_metrics = []
     start_time = time.time()
 
-    # Initialisation de l'early stopping
-    early_stopping = EarlyStopping(patience=5, delta=0)
+    # Initialize early stopping if enabled
+    early_stopping = EarlyStopping(patience=5, delta=0) if use_early_stopping else None
 
     for epoch in range(epochs):
         epoch_start_time = time.time()
@@ -95,16 +95,17 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
               f"Val F1: {val_f1:.4f}, Time: {epoch_time:.2f}s")
 
         # Early stopping check
-        early_stopping(avg_val_loss)
-        if early_stopping.early_stop:
-            print(f"Early stopping triggered at epoch {epoch + 1}.")
-            break
+        if use_early_stopping:
+            early_stopping(avg_val_loss)
+            if early_stopping.early_stop:
+                print(f"Early stopping triggered at epoch {epoch + 1}.")
+                break
 
     total_time = time.time() - start_time
     print(f"Total training time: {total_time:.2f}s")
 
     # Save model weights after training
-    model_save_path = f"training/mobilenetv2_trained_{training_time_name}.pth"
+    model_save_path = f"training/{model.__class__.__name__}_trained_{training_time_name}.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"Model weights saved to {model_save_path}")
 
@@ -112,44 +113,142 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
 
 
 
-def kfold_cross_validation(model, dataset, criterion, optimizer, epochs, k_folds=5, training_time_name="model"):
-    # Création du KFold
-    kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
-    
-    fold_metrics = []  # Pour stocker les métriques de chaque pli
 
-    # Diviser le dataset en k plis
-    for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
-        print(f"Training for fold {fold+1}/{k_folds}")
-        
-        # Diviser le dataset en train et validation pour chaque pli
-        train_subset = Subset(dataset, train_idx)
-        val_subset = Subset(dataset, val_idx)
+def kfold_cross_validation_with_hyperparams(
+    model_class, 
+    dataset, 
+    criterion, 
+    optimizer_class, 
+    param_grid, 
+    k_folds=5, 
+    epochs=30, 
+    augment=True, 
+    training_time_name="model",
+    device="cuda:0"
+):
+    """
+    Perform K-fold cross-validation with hyperparameter search and optional data augmentation.
 
-        # Créer des DataLoaders pour chaque pli
-        train_loader = DataLoader(train_subset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=32, shuffle=False)
+    Args:
+        model_class: Class of the model to initialize for each configuration.
+        dataset: Full dataset for K-fold splitting.
+        criterion: Loss function.
+        optimizer_class: Optimizer class (e.g., optim.Adam).
+        param_grid: Dictionary of hyperparameters to search.
+        k_folds: Number of folds for K-fold CV.
+        epochs: Number of epochs for each training run.
+        augment: Whether to apply data augmentation.
+        training_time_name: Base name for saving model weights and logs.
+        device: Device for training (default "cuda:0").
 
-        # Appeler la fonction de formation pour chaque pli
-        training_metrics, model_save_path, total_time = train_model(
-            model=model, 
-            train_loader=train_loader, 
-            val_loader=val_loader, 
-            test_loader=None,  # Il n'est pas utilisé ici
-            criterion=criterion, 
-            optimizer=optimizer, 
-            epochs=epochs, 
-            training_time_name=f"{training_time_name}_fold_{fold+1}"
-        )
+    Returns:
+        List of metrics and model paths for each parameter configuration and fold.
+    """
+    # Initialize hyperparameter grid
+    param_combinations = list(ParameterGrid(param_grid))
+    all_results = []
 
-        # Sauvegarder les métriques du pli
-        fold_metrics.append({
-            "fold": fold + 1,
-            "training_metrics": training_metrics,
-            "model_save_path": model_save_path
+    for params in param_combinations:
+        print(f"\nTesting hyperparameters: {params}")
+
+        # Create KFold object
+        kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+        param_results = []  # Metrics for this hyperparameter combination
+
+        for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
+            print(f"Fold {fold + 1}/{k_folds} for hyperparameters {params}")
+            
+            # Split dataset into train and validation subsets
+            train_subset = Subset(dataset, train_idx)
+            val_subset = Subset(dataset, val_idx)
+
+            # Apply data augmentation only to the training subset
+            train_loader = DataLoader(
+                train_subset, 
+                batch_size=params['batch_size'], 
+                shuffle=True, 
+                collate_fn=None if augment else lambda x: x
+            )
+            val_loader = DataLoader(
+                val_subset, 
+                batch_size=params['batch_size'], 
+                shuffle=False
+            )
+
+            # Initialize the model
+            model = model_class(pretrained=True)
+            model.classifier[1] = nn.Linear(model.last_channel, len(dataset.classes))
+            model = model.to(device)
+
+            # Initialize optimizer with current learning rate
+            optimizer = optimizer_class(model.parameters(), lr=params['learning_rate'])
+
+            # Train the model for this fold
+            training_metrics, model_save_path, total_time = train_model(
+                model=model, 
+                train_loader=train_loader, 
+                val_loader=val_loader, 
+                test_loader=None, 
+                criterion=criterion, 
+                optimizer=optimizer, 
+                epochs=epochs, 
+                training_time_name=f"{training_time_name}_lr_{params['learning_rate']}_bs_{params['batch_size']}_fold_{fold+1}"
+            )
+
+            # Store fold results
+            param_results.append({
+                "fold": fold + 1,
+                "training_metrics": training_metrics,
+                "model_save_path": model_save_path,
+                "params": params
+            })
+
+        # Aggregate results for this parameter combination
+        all_results.append({
+            "params": params,
+            "results": param_results
         })
 
-    return fold_metrics
+    return all_results
+
+# def kfold_cross_validation(model, dataset, criterion, optimizer, epochs, k_folds=5, training_time_name="model"):
+#     # Création du KFold
+#     kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+    
+#     fold_metrics = []  # Pour stocker les métriques de chaque pli
+
+#     # Diviser le dataset en k plis
+#     for fold, (train_idx, val_idx) in enumerate(kf.split(dataset)):
+#         print(f"Training for fold {fold+1}/{k_folds}")
+        
+#         # Diviser le dataset en train et validation pour chaque pli
+#         train_subset = Subset(dataset, train_idx)
+#         val_subset = Subset(dataset, val_idx)
+
+#         # Créer des DataLoaders pour chaque pli
+#         train_loader = DataLoader(train_subset, batch_size=32, shuffle=True)
+#         val_loader = DataLoader(val_subset, batch_size=32, shuffle=False)
+
+#         # Appeler la fonction de formation pour chaque pli
+#         training_metrics, model_save_path, total_time = train_model(
+#             model=model, 
+#             train_loader=train_loader, 
+#             val_loader=val_loader, 
+#             test_loader=None,  # Il n'est pas utilisé ici
+#             criterion=criterion, 
+#             optimizer=optimizer, 
+#             epochs=epochs, 
+#             training_time_name=f"{training_time_name}_fold_{fold+1}"
+#         )
+
+#         # Sauvegarder les métriques du pli
+#         fold_metrics.append({
+#             "fold": fold + 1,
+#             "training_metrics": training_metrics,
+#             "model_save_path": model_save_path
+#         })
+
+#     return fold_metrics
 
 
 

@@ -5,11 +5,16 @@ Comparaison efficient net et mobilenetv2
 expliqué l'impact de la data augmentation 
 
 Comparaison :
- - Data Augmentation
- - Avec ou sans Earlystop
- - Avec ou sans KFold 
+ - Data Augmentation ->  interpolation bilinéaire pour le temps réelle après 
+ - Avec ou sans Earlystop --> Garder tout le temps
+ - Avec ou sans KFold --> NO toujours garder un KFold 
  - Influence du LR sur le fine-tunning 
  - MobileNetV2 VS EfficientNet
+
 Faire varier la head de MobileNetv2
+
 matrice de confusion
 expliquée le fine-tunning  
+
+
+une fois LR et batch size trouvé , les fixer et essayer d'autre 
