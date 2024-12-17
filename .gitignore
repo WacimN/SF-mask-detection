@@ -12,6 +12,10 @@ pyproject.toml
 
 *.zip
 
+# Ignore pth files 
+*.pth
+
+
 # Ignore temporary/system files
 *.ipynb_checkpoints
 __pycache__/

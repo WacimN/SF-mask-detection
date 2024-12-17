@@ -1,3 +1,4 @@
+
 import json
 import plotly.graph_objects as go
 import os
@@ -11,6 +12,11 @@ from torch import nn
 from PIL import Image
 from tqdm import tqdm
 import time
+from torchvision import models
+import numpy as np
+
+from sklearn.metrics import roc_curve, auc
+
 
 
 
@@ -178,12 +184,10 @@ def plot_confusion_matrix(model, test_loader, classes, device):
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes)
     plt.xlabel('Predicted')
     plt.ylabel('True')
-    plt.title('Confusion Matrix')
+    plt.title(f'Confusion Matrix {model.__class__.__name__}, test dataset size: {len(y_true)}')
     plt.show()
     print(classification_report(y_true, y_pred, target_names=classes))
     
-
-
 
 
 def load_results(results_file):
@@ -258,33 +262,45 @@ def save_best_config(results):
 # ========================
 # Helper Functions
 # ========================
-import torch.nn as nn
-from torchvision import models
 
-def initialize_model(model_class, num_classes, device="cuda:0"):
+def load_model(model_name, num_classes, model_save_path, device="cuda:0"):
     """
-    Initialize a model with a specified number of output classes.
+    Load a pre-trained model and its weights from a .pth file.
 
     Args:
-        model_class: Model class to initialize (e.g., models.mobilenet_v2 or models.efficientnet_b0).
-        num_classes: Number of output classes.
-        device: Device to load the model (default is "cuda:0").
+        model_name (str): The name of the model to load (e.g., "mobilenet_v2", "efficientnet_b0").
+        num_classes (int): Number of output classes for the model.
+        model_save_path (str): Path to the .pth file containing the trained weights.
+        device (str): Device to load the model on (default: "cuda:0").
 
     Returns:
-        Initialized model.
+        model: The loaded and prepared model.
     """
-    model = model_class(pretrained=True)
-
-    # Check model class and adjust the final layer
-    if isinstance(model, models.MobileNetV2):
-        model.classifier[1] = nn.Linear(model.last_channel, num_classes)
-    elif isinstance(model, models.EfficientNet):
+    # Initialize the model
+    if model_name == "mobilenet_v2":
+        model = models.mobilenet_v2(pretrained=True)
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+    elif model_name.startswith("efficientnet"):
+        model = getattr(models, model_name)(pretrained=True)
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
     else:
-        raise ValueError("Unsupported model class")
+        raise ValueError(f"Unsupported model: {model_name}")
 
-    return model.to(device)
+    # Load the weights
+    try:
+        model.load_state_dict(torch.load(model_save_path, map_location=device), strict=False)
+        print(f"Weights loaded successfully from {model_save_path}")
+    except Exception as e:
+        raise RuntimeError(f"Error loading weights from {model_save_path}: {e}")
 
+    # Move model to device
+    model = model.to(device)
+
+    # Set to evaluation mode
+    model.eval()
+    print(f"Model {model_name} loaded and set to evaluation mode on device: {device}")
+
+    return model
 
 
 def save_best_model(current_accuracy, best_accuracy, model, save_path):
@@ -333,3 +349,78 @@ def measure_inference_time(model, dataloader, device="cuda:0"):
             break  # Measure on a single batch
     avg_inference_time = (total_time / num_samples) * 1000  # Convert to ms
     return avg_inference_time
+
+
+
+
+def calculate_mean_std(metrics_list, test_accuracy):
+    """
+    Calculate mean and standard deviation for train/validation metrics and include test accuracy.
+
+    Args:
+        metrics_list (list of dicts): List of training metrics for each epoch.
+        test_accuracy (float): Test accuracy for the model.
+
+    Returns:
+        dict: Dictionary containing mean and std for each metric.
+    """
+    results = {
+        "train_loss": [],
+        "val_loss": [],
+        "train_accuracy": [],
+        "val_accuracy": [],
+        "train_f1": [],
+        "val_f1": []
+    }
+
+    for metrics in metrics_list:
+        results["train_loss"].append(metrics["train_loss"])
+        results["val_loss"].append(metrics["val_loss"])
+        results["train_accuracy"].append(metrics["train_accuracy"])
+        results["val_accuracy"].append(metrics["val_accuracy"])
+        results["train_f1"].append(metrics["train_f1"])
+        results["val_f1"].append(metrics["val_f1"])
+
+    summary = {
+        "train_loss": (np.mean(results["train_loss"]), np.std(results["train_loss"])),
+        "val_loss": (np.mean(results["val_loss"]), np.std(results["val_loss"])),
+        "train_accuracy": (np.mean(results["train_accuracy"]), np.std(results["train_accuracy"])),
+        "val_accuracy": (np.mean(results["val_accuracy"]), np.std(results["val_accuracy"])),
+        "train_f1": (np.mean(results["train_f1"]), np.std(results["train_f1"])),
+        "val_f1": (np.mean(results["val_f1"]), np.std(results["val_f1"])),
+        "test_accuracy": test_accuracy
+    }
+
+    return summary
+
+
+def plot_roc_curve(model, test_loader, num_classes, model_name, device="cuda:0"):
+    """
+    Plot the ROC curve for a model using the test data.
+    
+    Args:
+        model: The trained model.
+        test_loader: DataLoader for the test dataset.
+        num_classes: Number of output classes.
+        model_name: Name of the model for labeling the plot.
+        device: Device for computation (default: "cuda:0").
+    """
+    model.eval()
+    y_true = []
+    y_scores = []
+
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            probabilities = torch.softmax(outputs, dim=1)
+            y_scores.extend(probabilities[:, 1].cpu().numpy())  # Score for the positive class
+            y_true.extend(labels.cpu().numpy())
+
+    # Compute ROC curve and AUC
+    fpr, tpr, _ = roc_curve(y_true, y_scores)
+    roc_auc = auc(fpr, tpr)
+
+    # Plot ROC curve
+    plt.plot(fpr, tpr, label=f"{model_name} (AUC = {roc_auc:.2f})")
+    return roc_auc

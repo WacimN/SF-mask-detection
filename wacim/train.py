@@ -8,6 +8,34 @@ from utils import save_best_model, save_metrics_to_json, initialize_model
 import os
 
 # ========================
+# Initialize Model Function
+# ========================
+
+def initialize_model(model_class, num_classes, device="cuda:0"):
+    """
+    Initialize a model with a specified number of output classes.
+
+    Args:
+        model_class: Model class to initialize (e.g., models.mobilenet_v2 or models.efficientnet_b0).
+        num_classes: Number of output classes.
+        device: Device to load the model (default is "cuda:0").
+
+    Returns:
+        Initialized model.
+    """
+    model = model_class(pretrained=True)
+
+    # Check model class and adjust the final layer
+    if isinstance(model, models.MobileNetV2):
+        model.classifier[1] = nn.Linear(model.last_channel, num_classes)
+    elif isinstance(model, models.EfficientNet):
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, num_classes)
+    else:
+        raise ValueError("Unsupported model class")
+
+    return model.to(device)
+
+# ========================
 # Train Model Function (Updated)
 # ========================
 def train_model(model, train_loader, val_loader, test_loader, criterion, optimizer, epochs, training_time_name, device="cuda:0", use_early_stopping=True):
