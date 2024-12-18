@@ -103,3 +103,4 @@ def get_dataloaders(train_dir, test_dir, augment=False, batch_size=BATCH_SIZE):
     test_loader = DataLoader(test_subset, batch_size=BATCH_SIZE, shuffle=False)
     
     return train_dataset, train_subset, val_subset , test_subset, train_loader, val_loader, test_loader
+

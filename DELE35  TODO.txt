@@ -18,3 +18,11 @@ expliquée le fine-tunning
 
 
 une fois LR et batch size trouvé , les fixer et essayer d'autre 
+
+
+TODO last week 
+Mettre la loss function 
+dropout pour l'overfitting 
+pour la comparaison de la data augmentation faire 
+- avec et sans 
+- en enlevant une a la fois et de voir l'impact 
