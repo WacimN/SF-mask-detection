@@ -14,6 +14,11 @@ from tqdm import tqdm
 import time
 from torchvision import models
 import numpy as np
+import random
+import pickle
+
+from torchvision import transforms
+from data_load import MEAN, STD
 
 from sklearn.metrics import roc_curve, auc
 
@@ -424,3 +429,149 @@ def plot_roc_curve(model, test_loader, num_classes, model_name, device="cuda:0")
     # Plot ROC curve
     plt.plot(fpr, tpr, label=f"{model_name} (AUC = {roc_auc:.2f})")
     return roc_auc
+
+
+
+def get_random_image_from_test_dir(test_dir):
+    """Get a random image path from the test directory."""
+    image_paths = []
+    for root, _, files in os.walk(test_dir):
+        for file in files:
+            if file.endswith(('png', 'jpg', 'jpeg')):
+                image_paths.append(os.path.join(root, file))
+    return random.choice(image_paths)
+
+def visualize_augmentations(image_path, transform, n_augmentations=5):
+    """Visualize augmentations on the same image."""
+    original_image = Image.open(image_path).convert("RGB")
+
+    # Define augmentation names
+    augmentation_names = [
+        "Horizontal Flip",
+        "Rotation",
+        "Color Jitter",
+        "Perspective Distortion",
+        "Affine Transformation"
+    ]
+
+    # Apply augmentations
+    augmented_images = [transform(original_image) for _ in range(n_augmentations)]
+
+    # Convert tensors back to PIL images for visualization
+    inv_transform = transforms.Compose([
+        transforms.Normalize(mean=[-m / s for m, s in zip(MEAN, STD)], std=[1 / s for s in STD]),
+        transforms.ToPILImage()
+    ])
+    
+    augmented_images = [inv_transform(img) for img in augmented_images]
+
+    # Plot original and augmented images
+    fig, axes = plt.subplots(1, n_augmentations + 1, figsize=(15, 5))
+    axes[0].imshow(original_image)
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
+
+    for i, aug_img in enumerate(augmented_images):
+        axes[i + 1].imshow(aug_img)
+        axes[i + 1].set_title(augmentation_names[i % len(augmentation_names)])
+        axes[i + 1].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    
+def visualize_individual_augmentations(image_path):
+    """Visualize the effect of each augmentation separately on the original image."""
+    original_image = Image.open(image_path).convert("RGB")
+
+    # Define individual transformations with names
+    transformations = [
+        ("Horizontal Flip", transforms.RandomHorizontalFlip(p=1.0)),
+        ("Rotation", transforms.RandomRotation(degrees=15)),
+        ("Color Jitter", transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2)),
+        ("Perspective Distortion", transforms.RandomPerspective(distortion_scale=0.2, p=1.0)),
+        ("Affine Transformation", transforms.RandomAffine(degrees=20, scale=(0.8, 1.2), translate=(0.2, 0.2))),
+    ]
+
+    # Apply each transformation individually
+    augmented_images = [(name, trans(original_image)) for name, trans in transformations]
+
+    # Plot original and augmented images
+    fig, axes = plt.subplots(1, len(augmented_images) + 1, figsize=(15, 5))
+    axes[0].imshow(original_image)
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
+
+    for i, (name, img) in enumerate(augmented_images):
+        axes[i + 1].imshow(img)
+        axes[i + 1].set_title(name)
+        axes[i + 1].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    
+    
+
+def save_metrics_and_models(model_metrics, model_training_time,model_path, model_name):
+    
+    # Créer le dossier 'saved_notebook_models' s'il n'existe pas déjà
+    os.makedirs('saved_notebook_models', exist_ok=True)
+
+    # Enregistrer les métriques et les temps d'entraînement
+    with open(f'saved_notebook_models/{model_name}_metrics.pkl', 'wb') as f:
+        pickle.dump(model_metrics, f)
+
+    with open(f'saved_notebook_models/{model_name}_training_time.pkl', 'wb') as f:
+        pickle.dump(model_training_time, f)
+
+    # Enregistrer les chemins des modèles
+    with open(f'saved_notebook_models/{model_name}_model_path.txt', 'w') as f:
+        f.write(model_path)
+
+def load_metrics_and_models(model_name):
+    # Charger les métriques et les temps d'entraînement
+    with open(f'saved_notebook_models/{model_name}ç_metrics.pkl', 'rb') as f:
+        model_metrics = pickle.load(f)
+
+    with open(f'saved_notebook_models/{model_name}_training_time.pkl', 'rb') as f:
+        model_training_time = pickle.load(f)
+
+    # Charger les chemins des modèles
+    with open(f'saved_notebook_models/{model_name}_model_path.txt', 'r') as f:
+        model_path = f.read()
+
+    return model_metrics, model_training_time, model_path
+
+
+# Updated plot_accuracy_models function
+def plot_accuracy_models(metrics1, metrics2, model1_name, model2_name, lr, batch_size):
+    epochs1 = list(range(1, len(metrics1) + 1))
+    epochs2 = list(range(1, len(metrics2) + 1))
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=epochs1, y=[m["train_accuracy"] for m in metrics1], mode='lines+markers', name=f"{model1_name} Train Accuracy"))
+    fig.add_trace(go.Scatter(x=epochs1, y=[m["val_accuracy"] for m in metrics1], mode='lines+markers', name=f"{model1_name} Val Accuracy"))
+    fig.add_trace(go.Scatter(x=epochs2, y=[m["train_accuracy"] for m in metrics2], mode='lines+markers', name=f"{model2_name} Train Accuracy"))
+    fig.add_trace(go.Scatter(x=epochs2, y=[m["val_accuracy"] for m in metrics2], mode='lines+markers', name=f"{model2_name} Val Accuracy"))
+    fig.update_layout(
+        title=f"Training vs Validation Accuracy (lr={lr}, bs={batch_size})",
+        xaxis_title="Epoch",
+        yaxis_title="Accuracy (%)"
+    )
+    fig.show()
+
+# Updated plot_loss_models function
+def plot_loss_models(metrics1, metrics2, model1_name, model2_name, lr, batch_size):
+    epochs1 = list(range(1, len(metrics1) + 1))
+    epochs2 = list(range(1, len(metrics2) + 1))
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=epochs1, y=[m["train_loss"] for m in metrics1], mode='lines+markers', name=f"{model1_name} Train Loss"))
+    fig.add_trace(go.Scatter(x=epochs1, y=[m["val_loss"] for m in metrics1], mode='lines+markers', name=f"{model1_name} Val Loss"))
+    fig.add_trace(go.Scatter(x=epochs2, y=[m["train_loss"] for m in metrics2], mode='lines+markers', name=f"{model2_name} Train Loss"))
+    fig.add_trace(go.Scatter(x=epochs2, y=[m["val_loss"] for m in metrics2], mode='lines+markers', name=f"{model2_name} Val Loss"))
+    fig.update_layout(
+        title=f"Training vs Validation Loss (lr={lr}, bs={batch_size})",
+        xaxis_title="Epoch",
+        yaxis_title="Loss"
+    )
+    fig.show()

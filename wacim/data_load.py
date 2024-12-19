@@ -12,14 +12,15 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 BATCH_SIZE = 32 # Number of images in each batch
 TRAIN_VAL_SPLIT = 0.8 # 80% for training, 20% for validation
 DATASET_PROPORTION = 0.1  # Use a fraction of the dataset for faster training
-MEAN, STD = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]  # Normalization parameters
-
+# MEAN, STD = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]  # Normalization parameters
+MEAN, STD = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 # ========================
 # Transforms
 # ========================
 def get_transforms(augment=False):
     """Return transforms for data preprocessing."""
     if augment:
+        print("Data augmentation enabled")
         return transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomRotation(degrees=15),
@@ -31,6 +32,7 @@ def get_transforms(augment=False):
             transforms.Normalize(mean=MEAN, std=STD),
         ])
     return transforms.Compose([
+        transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BILINEAR),
         transforms.ToTensor(),
         transforms.Normalize(mean=MEAN, std=STD),
     ])

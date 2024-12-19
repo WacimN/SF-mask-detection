@@ -4,8 +4,10 @@ from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import KFold, ParameterGrid
 from torch import nn
-from utils import save_best_model, save_metrics_to_json, initialize_model
+from utils import save_best_model, save_metrics_to_json
 import os
+from torchvision import models
+
 
 # ========================
 # Initialize Model Function
@@ -58,10 +60,13 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
 
         # Training loop
         for inputs, labels in train_loader:
+            # inputs, labels = inputs.to(device), labels.to(device)
             inputs, labels = inputs.to(device), labels.to(device)
 
             optimizer.zero_grad()
             outputs = model(inputs)
+            # print(f"Outputs shape: {outputs.shape}, Labels shape: {labels.shape}")  # Debugging dimensions
+
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -70,6 +75,7 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
 
             # Calculate training accuracy and collect predictions/labels
             _, predicted = torch.max(outputs, 1)
+            # predicted = (outputs >= 0.5).long()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             all_labels.extend(labels.cpu().numpy())
@@ -90,6 +96,7 @@ def train_model(model, train_loader, val_loader, test_loader, criterion, optimiz
         with torch.no_grad():
             for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
+                # labels = labels.unsqueeze(1)  # Ajuste la forme new
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
@@ -311,3 +318,33 @@ class EarlyStopping:
             self.counter += 1
             if self.counter >= self.patience:
                 self.early_stop = True
+                
+                
+def initialize_model_sigmoid(model_class, device="cuda:0"):
+    """
+    Initialize a model for binary classification.
+
+    Args:
+        model_class: Model class to initialize (e.g., models.mobilenet_v2 or models.efficientnet_b0).
+        device: Device to load the model (default is "cuda:0").
+
+    Returns:
+        Initialized model.
+    """
+    model = model_class(pretrained=True)
+
+    # Check model class and adjust the final layer
+    if isinstance(model, models.MobileNetV2):
+        model.classifier[1] = nn.Sequential(
+            nn.Linear(model.last_channel, 1),
+            nn.Sigmoid()
+        )
+    elif isinstance(model, models.EfficientNet):
+        model.classifier[1] = nn.Sequential(
+            nn.Linear(model.classifier[1].in_features, 1),
+            nn.Sigmoid()
+        )
+    else:
+        raise ValueError("Unsupported model class")
+
+    return model.to(device)
